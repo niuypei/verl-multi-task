@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "verl-multitask"
+version = "0.1.0.dev0"
+description = "Source-first MultiTask passthrough integration for verl experimental Fully Async"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["multi_task_scheduler*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = "-ra --strict-markers"
+markers = [
+  "native: imports the actual verl and backend dependencies",
+  "ray_integration: starts real CPU Ray actors (no verl or GPU training)",
+]
