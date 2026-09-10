@@ -24,11 +24,13 @@ from verl.trainer.ppo.utils import Role
 
 from multi_task_scheduler.integration.verl.ray_actor import unwrap_native_actor_class
 from multi_task_scheduler.scheduler.discovery import get_or_create_group_scheduler
+from multi_task_scheduler.scheduler.registration import build_task_resource_registration
 
 from .rollouter import MultiTaskFullyAsyncRollouter
 from .trainer import MultiTaskFullyAsyncTrainer
 
 logger = logging.getLogger(__name__)
+REGISTRATION_TIMEOUT_S = 30
 
 
 @ray.remote(num_cpus=1)
@@ -53,6 +55,52 @@ class MultiTaskFullyAsyncTaskRunner(unwrap_native_actor_class(FullyAsyncTaskRunn
             except Exception:
                 # Cleanup must not replace the original initialization/training error.
                 logger.warning("Could not detach TaskRunner %s from GroupScheduler", task_id, exc_info=True)
+
+    def _initialize_components(self, config) -> None:
+        """Register observed resources after native initialization, before either fit."""
+        super()._initialize_components(config)
+        if self.group_scheduler is None:
+            raise RuntimeError("Resource registration requires the TaskRunner's GroupScheduler handle")
+
+        training_nodes, rollout_metadata = ray.get(
+            [
+                self.components["trainer"].collect_training_nodes.remote(),
+                self.components["rollouter"].collect_rollout_resources.remote(),
+            ],
+            timeout=REGISTRATION_TIMEOUT_S,
+        )
+        registration = build_task_resource_registration(
+            task_id=ray.get_runtime_context().get_actor_id(),
+            training_nodes=training_nodes,
+            rollout_metadata=rollout_metadata,
+        )
+        # A timeout does not prove that GS rejected the first submission. Retry
+        # exactly the same immutable payload once; never recollect a new topology.
+        for attempt in range(2):
+            try:
+                result = ray.get(
+                    self.group_scheduler.register_task_resources.remote(registration),
+                    timeout=REGISTRATION_TIMEOUT_S,
+                )
+            except ray.exceptions.GetTimeoutError as error:
+                if attempt == 1:
+                    raise RuntimeError(
+                        f"Could not confirm resource registration for task {registration.task_id}; "
+                        "the GS commit outcome is unknown"
+                    ) from error
+                logger.warning("Retrying timed-out resource registration for task %s", registration.task_id)
+                continue
+            if (
+                not isinstance(result, dict)
+                or result.get("task_id") != registration.task_id
+                or result.get("status") not in ("REGISTERED", "ALREADY_REGISTERED")
+            ):
+                raise RuntimeError(f"Invalid resource registration result for task {registration.task_id}")
+            logger.info(
+                "Registered task %s: %d training nodes, %d native rollout replicas",
+                registration.task_id, len(registration.training_node_ids), len(registration.rollout_replicas),
+            )
+            return
 
     def _create_rollouter(self, config) -> None:
         """Preserve native main.py:117-136; replace only the type and GS argument."""

@@ -21,11 +21,16 @@ from verl.utils.config import omega_conf_to_dataclass
 
 from multi_task_scheduler.checkpoint.checkpoint_engine_manager import MultiTaskCheckpointEngineManager
 from multi_task_scheduler.integration.verl.ray_actor import unwrap_native_actor_class
+from multi_task_scheduler.integration.verl.resource_query import collect_training_nodes
 
 
 @ray.remote(num_cpus=10)
 class MultiTaskFullyAsyncTrainer(unwrap_native_actor_class(FullyAsyncTrainer)):
     """Own the CE Manager in this Actor; inherit training and weight synchronization."""
+
+    async def collect_training_nodes(self):
+        """Return only physical actor/critic/ref nodes after native initialization."""
+        return await collect_training_nodes(self.all_wg)
 
     async def _setup_checkpoint_manager(self):
         """Preserve native trainer.py:217-224; replace only the Manager class."""

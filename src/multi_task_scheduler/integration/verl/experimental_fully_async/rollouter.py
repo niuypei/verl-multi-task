@@ -25,6 +25,10 @@ class MultiTaskFullyAsyncRollouter(unwrap_native_actor_class(FullyAsyncRollouter
         self.group_scheduler = group_scheduler
         super().__init__(config, tokenizer, processor=processor, device_name=device_name)
 
+    async def collect_rollout_resources(self):
+        """Keep runtime handles in this Actor and return the Manager's metadata."""
+        return await self.llm_server_manager.collect_rollout_resources()
+
     async def _init_async_rollout_manager(self):
         enable_agent_reward_loop = not self.use_rm or self.config.reward.reward_model.enable_resource_pool
         reward_loop_worker_handles = self.reward_loop_manager.reward_loop_workers if enable_agent_reward_loop else None
