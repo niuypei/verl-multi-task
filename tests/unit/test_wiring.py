@@ -248,3 +248,41 @@ def test_trainer_uses_rollouter_replica_projection_for_native_checkpoint_manager
     factory.assert_called_once_with(config=checkpoint_config, actor_wg=trainer.actor_wg, replicas=replicas)
     assert trainer.checkpoint_manager is factory.return_value
     assert not hasattr(trainer, "group_scheduler")
+
+
+def test_trainer_resource_rpc_uses_its_own_physical_worker_groups():
+    nodes = (object(),)
+    collector = AsyncMock(return_value=nodes)
+    trainer_class = _isolated_class(
+        f"{INTEGRATION}/trainer.py", "MultiTaskFullyAsyncTrainer", object,
+        collect_training_nodes=collector,
+    )
+    trainer = trainer_class()
+    trainer.all_wg = {"actor": object(), "ref": object()}
+    assert asyncio.run(trainer.collect_training_nodes()) is nodes
+    collector.assert_awaited_once_with(trainer.all_wg)
+
+
+def test_manager_resource_query_uses_primary_standalone_replicas_not_lb_or_ce():
+    metadata, replicas = ((), ()), [object(), object()]
+    collector = AsyncMock(return_value=metadata)
+    manager_class = _isolated_class(
+        f"{INTEGRATION}/llm_server_manager.py", "MultiTaskLLMServerManager", object,
+        collect_rollout_resources=collector,
+    )
+    manager = manager_class.__new__(manager_class)  # Isolate this method, not native construction.
+    manager.get_standalone_replicas = Mock(return_value=replicas)
+    assert asyncio.run(manager.collect_rollout_resources()) is metadata
+    manager.get_standalone_replicas.assert_called_once_with()
+    collector.assert_awaited_once_with(replicas)
+
+
+def test_rollouter_resource_rpc_delegates_only_to_its_ordinary_manager():
+    metadata = ((), ())
+    rollouter_class = _isolated_class(
+        f"{INTEGRATION}/rollouter.py", "MultiTaskFullyAsyncRollouter", object,
+    )
+    rollouter = rollouter_class.__new__(rollouter_class)
+    rollouter.llm_server_manager = SimpleNamespace(collect_rollout_resources=AsyncMock(return_value=metadata))
+    assert asyncio.run(rollouter.collect_rollout_resources()) is metadata
+    rollouter.llm_server_manager.collect_rollout_resources.assert_awaited_once_with()

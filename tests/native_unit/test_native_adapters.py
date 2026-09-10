@@ -31,7 +31,7 @@ pytestmark = pytest.mark.native
 
 
 @pytest.mark.parametrize("extension,native,inherited", [
-    (MultiTaskFullyAsyncTaskRunner, FullyAsyncTaskRunner, ("_initialize_components", "_run_training_loop")),
+    (MultiTaskFullyAsyncTaskRunner, FullyAsyncTaskRunner, ("_run_training_loop",)),
     (MultiTaskFullyAsyncTrainer, FullyAsyncTrainer, ("init_workers", "fit", "_fit_update_weights")),
     (MultiTaskFullyAsyncRollouter, FullyAsyncRollouter, ("init_workers", "fit")),
 ])
@@ -66,6 +66,8 @@ def test_real_native_task_runner_constructor_is_preserved_without_discovering_gs
     assert runner.components == {}
     assert not runner.shutdown_event.is_set()
     assert runner.group_scheduler is None
+    # Registration now extends initialization; the actual training loop remains native.
+    assert "_initialize_components" in unwrap_native_actor_class(MultiTaskFullyAsyncTaskRunner).__dict__
 
 
 def test_real_native_load_balancer_constructor_and_routing_are_preserved():
