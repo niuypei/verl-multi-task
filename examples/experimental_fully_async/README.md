@@ -1,7 +1,8 @@
 # 原生入口配置与真实环境验收
 
-状态：P1 接线已实现并由用户确认；真实 Hydra 启动和 GPU 训练待验证。
-更新日期：2026-09-08。配套 verl 为 `a9ebd0bb`（`v0.9.0-5-ga9ebd0bb`），伴生源码/测试提交为 `3aa443d`/`9a2b785`。
+状态：P2 注册版本待真实环境验证；P1 接线历史快照也没有真实环境通过结论。
+注册扩展沿用本文同一个 profile，无新增配置。当前注册版本的 GS 合同与 P1 不兼容，用户须按[交付说明](../../docs/task-registration.md)隔离验证环境。
+更新日期：2026-09-10。配套 verl 为 `a9ebd0bb`（`v0.9.0-5-ga9ebd0bb`），P2 伴生验证快照为 `aaab399`；完整 SHA 见 [P2 交接](../../docs/p2-validation-handoff.md)。
 
 ## 1. 用户只感知一个扩展开关
 
@@ -13,7 +14,7 @@
 - 字段为上述 profile：原生入口选择 MultiTask TaskRunner，后续创建链选择下游扩展。
 - 字段非法或显式启用后导入/配置失败：入口报错，不静默回退为原生训练。
 
-原生入口读取 profile 的位置为 `verl/experimental/fully_async_policy/fully_async_main.py:238`；
+原生入口读取 profile 的位置为 `verl/experimental/fully_async_policy/fully_async_main.py:243`；
 主配置字段位于 `verl/experimental/fully_async_policy/config/fully_async_ppo_trainer.yaml:10`。
 伴生校验器位于 `src/multi_task_scheduler/integration/verl/runtime_profile.py:28`。
 
@@ -54,4 +55,5 @@ GS 不分配初始化规模，用户继续通过原生 rollout 资源字段决�
 各进程源码位置、Actor/对象类型和日志，再交给开发者审阅。
 
 真实父类检查、各项完成条件与当前未验清单见 [开发计划](../../docs/development-plan.md)。
-当前本地 58 项 unit 与 3 项 CPU Ray 测试不替代以上验证；本轮只更新文档，没有执行这些真实环境步骤。
+当前本地 187 项 unit 与 7 项 CPU Ray 测试不替代以上验证；开发者没有执行这些真实环境步骤。
+用户还需按 [P2-V1—V9](../../docs/p2-validation-handoff.md#4-真实环境验证计划)核对实际资源注册、失败阻断和跨 job 视图。

@@ -1,6 +1,7 @@
-# 实体与初始化：完整接线，新增业务为空
+# P1 实体与初始化：完整接线，新增业务为空
 
-状态：P1 接线代码已由用户确认；以下 AS-IS 描述当前源码，不表示完整原生运行已通过。
+状态：P1 固定接入基线，保留原提交的 AS-IS 和行号，不表示当前注册扩展仍为空业务或完整原生运行已通过。
+P2 的初始化后注册、资源采集、GS 视图见[任务注册交付说明](task-registration.md)，固定版本与待验证事项见 [P2 交接](p2-validation-handoff.md)；下文“当前”均指 P1 基线。
 核对日期：2026-09-08。
 
 源码目录为 `/Users/nyp/Documents/multi_task_verl/verl` 与同级 `verl-multi-task`。
@@ -50,7 +51,7 @@ CE Worker 仍在原生 `verl/checkpoint_engine/base.py:323`、`:324` 构造 Serv
    证据：`verl/experimental/fully_async_policy/fully_async_main.py:222`、`:233`、`:235`、`:237`、`:238`。
 2. 启用时，main 调用伴生 `resolve_runtime_profile()`。解析器验证纯 STANDALONE 前提，并返回
    MultiTaskFullyAsyncTaskRunner ActorClass；解析器不初始化 Ray、不发现 GS、不创建 Actor。
-   证据：原生 `fully_async_main.py:243`；伴生 `integration/verl/runtime_profile.py:28`、`:87`。
+   证据：原生 `fully_async_main.py:243` 检查 profile，`:246` 调用解析器；伴生 `integration/verl/runtime_profile.py:28`、`:87`。
 3. 原生 `run_ppo()` 初始化 Ray，创建所选 TaskRunner，并调用其 `run.remote(config)`。
    证据：`verl/trainer/main_ppo.py:75`、`:91`、`:93`、`:94`。
 4. 扩展 TaskRunner.run 创建或获取 GS，并把自己的 ActorHandle 登记到 GS；TaskRunner 随后调用

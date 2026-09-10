@@ -1,7 +1,7 @@
 # verl-multi-task
 
-状态：用户已确认 P1 接线代码；GS 发现与九类 MultiTask 创建链已实现，完整 verl/vLLM 运行待真实环境验收。
-更新日期：2026-09-08。
+状态：**P2 待真实环境验证**，范围是既有接线与任务注册；P1 保留为未取得真实验证结果的历史快照。
+更新日期：2026-09-10。
 
 本仓是独立的 Python 源码库。用户仍从
 `verl.experimental.fully_async_policy.fully_async_main` 启动，不使用另一个伴生训练入口。
@@ -14,22 +14,22 @@
 - 九类扩展覆盖 TaskRunner、Trainer、Rollouter、LLM Manager、LB、Replica、HTTP Server、CE Manager 和 CE Worker。
   LB 指请求负载均衡器，CE 指 Checkpoint Engine 参数同步组件。
 - 扩展类复用原生 rollout、训练、MessageQueue、路由和参数同步。GS.schedule 返回空列表。
+- TaskRunner 在原生初始化返回后、fit 前登记实际 rollout 节点/GPU 与训练节点。GS 只保存初始归属，不推导空闲或可借状态。
 - 当前没有租约、心跳循环、借卡、bootstrap、同步 gate 或另一套 Replica registry。
 
 当前适配 experimental Fully Async + 纯 STANDALONE + vLLM 非 PD，不是 V1。
 PD（Prefill/Decode disaggregation）指预填充与解码分离；该路径需要另一组 Replica 类型，当前 profile 明确拒绝。
 未启用 profile 时，verl 入口不导入本包，也不创建 GS。
 
-当前配套提交：
+P2 固定配套提交：
 
 | 仓库 | 配套提交 | 内容 |
 |---|---|---|
-| verl-multi-task | `3aa443d` | 接入源码与 GS 发现 |
-| verl-multi-task | `9a2b785` | 选定测试及验证依赖 |
-| verl-multi-task | `66e56dc` | 已有架构、部署与示例文档 |
+| verl-multi-task | `aaab399bd970665480d72e678b08ff2aed66e719` | P2 验证快照，包含既有接线、本次注册源码与测试 |
+| verl-multi-task | `b392f807d4ae2f7b66569105adcd0bd749e97650` | 注册源码提交；后续 `aaab399` 单独提交测试 |
 | verl | `a9ebd0bb2354068229620b7e7a7aab2987edf864` | main 与主 YAML 两处接线；describe 为 `v0.9.0-5-ga9ebd0bb` |
 
-表中伴生提交记录源码、测试和初版文档的来源，后续文档修订以本仓 Git 历史为准。
+后续文档修订不改变固定源码/测试快照；历史 P1 提交见 [P1 交接](docs/p1-validation-handoff.md)。
 当前 verl 提交与先前配套提交 `2625ae0b` 的文件内容完全一致；本次提交检查没有修改 verl。
 原生对比基线固定为 `adc7eefa16dad75c5f7b878823d5a76eac90c7b3`，不随接线提交移动。
 
@@ -65,11 +65,13 @@ python -m verl.experimental.fully_async_policy.fully_async_main \
 部署必须包含配套 verl 接线提交；只复制本仓不能激活未修改的原生入口。
 `multitask.runtime.profile=null` 或缺失字段保留原生路径；显式启用后，非法配置、缺失依赖或不支持的类型会报错。
 用户继续使用 upstream Hydra primary，不配置逐类 FQN（Fully Qualified Name，完整限定类名）。
-完整验收步骤见 [开发计划](docs/development-plan.md)；配置边界见 [示例说明](examples/experimental_fully_async/README.md)。
+固定提交、验收步骤和结果表见 [P2 验证交接](docs/p2-validation-handoff.md)；配置边界见 [示例说明](examples/experimental_fully_async/README.md)。
+[任务注册交付说明](docs/task-registration.md)记录当前实现；用户验证 P2 不会自动把旧 P1 标记为通过。
+注册版本自动沿用同一 profile，没有新增开关；`registration-v1` GS 与旧 P1 合同不兼容，用户必须隔离两套验证环境。
 
 ## 验证状态与命令
 
-最近一次本地验证通过 58 项 unit 和 3 项真实 CPU Ray 检查。本轮文档更新没有重跑测试或安装依赖。
+2026-09-10 本地复验通过 187 项 unit 和 7 项真实 CPU Ray 检查；开发者没有安装依赖。
 子仓虚拟环境使用 Python 3.12.14、Hydra 1.3.2、Ray 2.48.0；开发者没有安装完整 verl/PyTorch/vLLM 依赖。
 默认测试目录只有 `tests/unit/`。
 
@@ -81,13 +83,14 @@ PYTHONPATH="$PWD/src" PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 .venv/bin/python -m pytest -q -p no:cacheprovider tests/unit
 
 PYTHONPATH="$PWD/src" PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 RAY_USAGE_STATS_ENABLED=0 \
-.venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_group_scheduler.py
+.venv/bin/python -m pytest -q -p no:cacheprovider \
+  tests/integration/test_group_scheduler.py tests/integration/test_task_registration.py
 ```
 
 | 测试层 | 当前结果 | 证明范围与限制 |
 |---|---|---|
-| unit | 58 项通过 | 真实 OmegaConf + AST/YAML 源码检查；重型父类与 RPC 使用替身，不证明完整初始化 |
-| CPU Ray | 3 项通过 | 真实 GS 并发发现/句柄，测试专用父类的继承、序列化和远程执行；不等于真实 verl 父类或 GPU 验证 |
+| unit | 187 项通过 | 纯资源数据、真实 OmegaConf + AST/YAML 源码检查；父类、RPC 与采集 Actor 使用明确替身，不证明完整初始化 |
+| CPU Ray | 7 项通过 | GS 发现/注册/冲突/清理、消息序列化、async Actor 查询/异常/超时及旧合同拒绝；GPU selectors 是合成元数据 |
 | native_unit | 11 项待真实环境执行 | 真实父类、方法委托、Ray 选项、TaskRunner/LB 本地构造；仍不启动 GPU Worker |
 | 原生训练 | 待用户验证 | 原生 Hydra、跨节点导入、九类扩展与 GS 初始化、partial rollout 两种值、训练/同步、跨 job GS 共享与退出 |
 
@@ -100,7 +103,7 @@ PYTHONPATH="$PWD/src" PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 
 ## 代码与生命周期说明
 
-[实体与初始化](docs/architecture.md) 列出九类扩展、GS、创建者、持有者、原生复用点和代码行号。
+[P1 实体与初始化](docs/architecture.md)保留固定接入基线；[任务注册交付说明](docs/task-registration.md)补充当前扩展与代码行号。
 固定 GS 位于 namespace `verl-multi-task`，name 为 `verl-multi-task-group-scheduler`。
-GS 使用 detached 生命周期；TaskRunner 正常进入退出清理时只解绑自己的句柄，不销毁共享 GS。
-强制 kill、进程崩溃或 GS 不可达可能留下句柄；当前没有心跳恢复，集群操作者负责最终清理不再使用的 GS。
+GS 使用 detached 生命周期；TaskRunner 正常退出时清除自己的句柄与注册元数据，不销毁共享 GS 或释放物理 GPU。
+强制 kill、进程崩溃或 GS 不可达可能留下登记；当前没有心跳恢复，操作者必须核对这些记录，不能据此重新授权 GPU。
